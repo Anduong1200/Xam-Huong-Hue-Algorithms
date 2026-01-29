@@ -13,8 +13,9 @@ const XAM_HUONG_RULES = [
     {
         id: "LUC_HUONG",
         name: "Lục Hường",
-        description: "6 Red Dice (Face 4)",
+        description: "6 Red Dice (Face 4) - Pure Royalty",
         score: 100,
+        isJackpot: true,
         category: RULE_CATEGORIES.IMPERIAL,
         check: (c) => c[4] === 6
     },
@@ -37,6 +38,21 @@ const XAM_HUONG_RULES = [
         score: 60,
         category: RULE_CATEGORIES.IMPERIAL,
         check: (c) => c[4] === 5
+    },
+    {
+        id: "TU_TU_CAP",
+        name: "Tứ Tự Cáp",
+        description: "4 Red Dice + Bonus from remaining dice",
+        score: 30, // Base score
+        category: RULE_CATEGORIES.IMPERIAL,
+        check: (c) => c[4] === 4,
+        getPayout: (c) => {
+            let bonus = 0;
+            for (let i = 1; i <= 6; i++) {
+                if (i !== 4) bonus += (i * (c[i] || 0));
+            }
+            return 30 + bonus;
+        }
     },
     {
         id: "NGU_TU",

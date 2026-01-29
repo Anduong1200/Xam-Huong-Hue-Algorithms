@@ -5,6 +5,14 @@
 const engine = new XamHuongEngine(6, XAM_HUONG_RULES);
 let myChart = null;
 
+// --- State Management ---
+let state = {
+    balance: 1000,
+    bet: 10,
+    jackpot: 5000,
+    history: []
+};
+
 // --- DOM Elements ---
 const dom = {
     // Tabs
@@ -41,6 +49,16 @@ const dom = {
     solverTargetArea: document.getElementById('solver-target-area'),
     btnSolve: document.getElementById('btn-solve'),
 
+    // HUD (Economy)
+    balanceDisplay: document.getElementById('balance-display'),
+    betInput: document.getElementById('bet-input'),
+    jackpotDisplay: document.getElementById('jackpot-display'),
+
+    // Research Insights
+    volatilityDisplay: document.getElementById('metric-volatility'),
+    entropyDisplay: document.getElementById('metric-entropy'),
+    ruinDisplay: document.getElementById('metric-ruin'),
+
     // Global
     status: document.getElementById('log-status'),
     btnExport: document.getElementById('btn-export')
@@ -53,13 +71,20 @@ function init() {
     setupWeightInputs();
     setupSolverUI();
     initChart();
+    updateHUD();
 
     renderSandbox();
     updateAnalysis();
 
     bindEvents();
 
-    dom.status.innerText = "Royal Palace Engine Initialized.";
+    dom.status.innerText = "Royal Palace Engine Expanded (v3.0).";
+}
+
+function updateHUD() {
+    if (dom.balanceDisplay) dom.balanceDisplay.innerText = state.balance.toLocaleString();
+    if (dom.jackpotDisplay) dom.jackpotDisplay.innerText = state.jackpot.toLocaleString();
+    if (dom.betInput) state.bet = parseInt(dom.betInput.value) || 10;
 }
 
 function bindEvents() {
@@ -239,19 +264,47 @@ async function handleSolve() {
 
 // --- Game Logic ---
 async function handleRoll() {
-    dom.rollBtn.disabled = true;
-    dom.bowl.innerHTML = '<div class="placeholder">Churning...</div>';
+    updateHUD();
+    if (state.balance < state.bet) {
+        alert("Insufficient balance for this royal wager!");
+        return;
+    }
 
-    await new Promise(r => setTimeout(r, 600));
+    dom.rollBtn.disabled = true;
+    state.balance -= state.bet;
+    state.jackpot += state.bet * 0.05; // 5% of bet to jackpot
+    updateHUD();
+
+    dom.bowl.classList.add('wiggle');
+    dom.bowl.innerHTML = '<div class="placeholder">Churning Royal Dice...</div>';
+
+    await new Promise(r => setTimeout(r, 800));
 
     const result = engine.simulate();
     renderDice(result.counts, dom.bowl);
+    dom.bowl.classList.remove('wiggle');
 
-    dom.resultText.innerText = result.bestEvent !== "NONE" ? XAM_HUONG_RULES.find(r => r.id === result.bestEvent).name : "No Event";
-    dom.payoutDisplay.innerText = `${result.payout}x`;
+    const rule = XAM_HUONG_RULES.find(r => r.id === result.bestEvent);
+    dom.resultText.innerText = rule ? rule.name : "None";
 
+    let winAmount = 0;
+    if (rule) {
+        if (rule.isJackpot) {
+            winAmount = state.jackpot;
+            state.jackpot = 5000; // Reset jackpot
+            alert("🏛️ MEGA JACKPOT! You have achieved Lục Hường!");
+        } else {
+            winAmount = state.bet * result.payout;
+        }
+    }
+
+    state.balance += winAmount;
+    dom.payoutDisplay.innerText = winAmount > 0 ? `+${winAmount.toLocaleString()}` : "0";
+    dom.payoutDisplay.style.color = winAmount > 0 ? "#c5a059" : "#e74c3c";
+
+    updateHUD();
     dom.rollBtn.disabled = false;
-    dom.status.innerText = `Rolled: ${result.bestEvent}`;
+    dom.status.innerText = `Result: ${result.bestEvent} (${winAmount})`;
 }
 
 function renderDice(counts, container) {
@@ -359,6 +412,14 @@ function updateAnalysis() {
         <div class="metric-item"><span>House Edge:</span> <strong>${(stats.houseEdge * 100).toFixed(2)}%</strong></div>
         <div class="metric-item"><span>Dice Count (N):</span> <strong>${engine.numDice}</strong></div>
     `;
+
+    // Mathematical Insights
+    if (dom.volatilityDisplay) dom.volatilityDisplay.innerText = stats.volatility.toFixed(2);
+    if (dom.entropyDisplay) dom.entropyDisplay.innerText = stats.entropy.toFixed(3) + " bits";
+
+    const targetProfit = state.balance * 0.5;
+    const ruin = engine.calculateRiskOfRuin(state.balance, state.bet, targetProfit);
+    if (dom.ruinDisplay) dom.ruinDisplay.innerText = (ruin * 100).toFixed(1) + "%";
 
     // Chart
     const keys = XAM_HUONG_RULES.map(r => r.id).filter(id => stats.stats[id] > 0.0001);

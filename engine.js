@@ -108,8 +108,13 @@ class XamHuongEngine {
         for (const rule of this.rules) {
             if (rule.check(counts)) {
                 activeRules.push(rule.id);
-                if (rule.score > maxScore) {
-                    maxScore = rule.score;
+                // Support for dynamic payouts (e.g. Tứ Tự Cáp)
+                const currentPayout = typeof rule.getPayout === 'function'
+                    ? rule.getPayout(counts)
+                    : (rule.score || 0);
+
+                if (currentPayout > maxScore) {
+                    maxScore = currentPayout;
                     primaryEvent = rule.id;
                 }
             }
@@ -136,40 +141,71 @@ class XamHuongEngine {
         };
         generate(1, this.numDice, [0, 0, 0, 0, 0, 0, 0]);
 
-        // Factorial cache
         const f = [1];
         for (let i = 1; i <= Math.max(this.numDice, 10); i++) f[i] = f[i - 1] * i;
 
         let ev = 0;
+        let secondMoment = 0;
         const eventProbs = {};
 
         for (const p of partitions) {
-            // Count dictionary for rules
             const counts = { 1: p[1], 2: p[2], 3: p[3], 4: p[4], 5: p[5], 6: p[6] };
-
-            // Multinomial prob: (N! / product(ni!)) * product(pi^ni)
             let denom = 1;
             let probTerm = 1;
             for (let i = 1; i <= 6; i++) {
                 denom *= f[p[i]] || 1;
                 probTerm *= Math.pow(this.faceWeights[i], p[i]);
             }
-            const multinomialCoeff = f[this.numDice] / denom;
-            const prob = multinomialCoeff * probTerm;
+            const prob = (f[this.numDice] / denom) * probTerm;
 
             const res = this.resolveRound(counts);
             ev += prob * res.payout;
+            secondMoment += prob * (res.payout * res.payout);
 
-            // Stats by tag
             res.events.forEach(id => {
                 eventProbs[id] = (eventProbs[id] || 0) + prob;
             });
-            // Best event stats
             const bestKey = `BEST_${res.bestEvent}`;
             eventProbs[bestKey] = (eventProbs[bestKey] || 0) + prob;
         }
 
-        return { ev, stats: eventProbs, houseEdge: (100 - ev) / 100 };
+        const variance = secondMoment - (ev * ev);
+        const volatility = Math.sqrt(variance);
+
+        return {
+            ev,
+            stats: eventProbs,
+            houseEdge: (100 - ev) / 100,
+            volatility,
+            entropy: this.calculateEntropy()
+        };
+    }
+
+    calculateEntropy() {
+        let h = 0;
+        for (let i = 1; i <= 6; i++) {
+            const p = this.faceWeights[i];
+            if (p > 0) h -= p * Math.log2(p);
+        }
+        return h;
+    }
+
+    calculateRiskOfRuin(balance, bet, targetProfit) {
+        const stats = this.calculateStats();
+        const winProb = Object.values(stats.stats).filter((k) => !k.startsWith('BEST_')).reduce((a, b) => a + b, 0);
+        // This is tricky because we have multiple events. Let's use 1 - P(NONE)
+        const probNone = stats.stats['BEST_NONE'] || 0;
+        const pWin = 1 - probNone;
+        const pLoss = probNone;
+
+        if (pWin >= pLoss) return 0.01; // Positive edge case
+
+        const qp = pLoss / pWin;
+        const b = balance / bet;
+        const t = (balance + targetProfit) / bet;
+
+        const prob = (Math.pow(qp, t) - Math.pow(qp, b)) / (Math.pow(qp, t) - 1);
+        return Math.max(0, Math.min(1, prob));
     }
 
     /**
