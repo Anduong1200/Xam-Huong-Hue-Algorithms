@@ -25,7 +25,12 @@ Một dự án mô phỏng hiện đại trò chơi **Xăm Hường** truyền t
 1. Tải toàn bộ thư mục về máy.
 2. Mở file `index.html` bằng trình duyệt web bất kỳ (Chrome, Edge, Firefox).
 3. Bấm **"Đổ Hột"** để chơi.
-4. Mở tab **"Config"** hoặc **"Analysis"** để trải nghiệm các tính năng phân tích.
+4. Mở tab **"Config"** để sử dụng **Solver**:
+   - Chọn mục tiêu (ví dụ: Muốn tỷ lệ ra K≥2 là 50%).
+   - Bấm "Tìm p4". Hệ thống sẽ tự động tính toán độ lệch mặt Hường cần thiết.
+5. Mở tab **"Analysis"** để xem:
+   - **Lý thuyết**: Số liệu chính xác toán học.
+   - **Mô phỏng**: Chạy thử nghiệm 1 triệu lượt để kiểm chứng độ biến động.
 
 ## Tài Liệu Chi Tiết
 

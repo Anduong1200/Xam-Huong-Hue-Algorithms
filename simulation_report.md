@@ -81,5 +81,3 @@ Khi tăng $ p_4 $ lên 0.2645 (để đạt 50% win rate):
    - Nếu để $ p_4 $ cao (game dễ), Jackpot sẽ nổ thường xuyên, nên giảm giá trị Jackpot.
    - Nếu muốn Jackpot giá trị cực lớn, phải giữ $ p_4 $ thấp hoặc yêu cầu thêm điều kiện phụ (ví dụ: Lục Hường + Màu Đỏ).
 
----
-*Báo cáo được trích xuất từ Engine tính toán chính xác (Exact Enumeration) của hệ thống Xăm Hường.*

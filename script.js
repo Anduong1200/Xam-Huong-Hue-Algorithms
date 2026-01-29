@@ -75,13 +75,24 @@ rollBtn.addEventListener('click', async () => {
     // 5. Show Result
     const bestEv = result.bestEvent;
     const payout = result.payout;
-    resultText.innerText = `${bestEv}`;
 
-    // More detailed sub-text
+    // Format Result Display
+    let resultHtml = `<div class="result-event">${bestEv}</div>`;
+
     const subEvents = result.events.filter(e => e !== bestEv && e !== "NO_EVENT").join(", ");
-    if (subEvents) resultText.innerHTML += `<br><span style="font-size:0.8em; color:#888;">Matches: ${subEvents}</span>`;
+    if (subEvents) {
+        resultHtml += `<div class="result-sub">Matches: ${subEvents}</div>`;
+    }
+    resultText.innerHTML = resultHtml;
 
-    payoutDisplay.innerText = payout > 0 ? `WIN x${payout}` : "LOSE";
+    // Formatting Payout with Classes
+    if (payout > 0) {
+        payoutDisplay.className = 'payout-tag win';
+        payoutDisplay.innerHTML = `WIN <span class="multiplier">x${payout}</span>`;
+    } else {
+        payoutDisplay.className = 'payout-tag lose';
+        payoutDisplay.innerHTML = `LOSE`;
+    }
 
     // Log
     logResult(result);
@@ -91,37 +102,60 @@ rollBtn.addEventListener('click', async () => {
 
 function renderDice(counts) {
     bowl.innerHTML = '';
-    // Flatten counts to array of faces for rendering
+    // Flatten counts
     let faces = [];
     for (let f = 1; f <= 6; f++) {
         for (let k = 0; k < counts[f]; k++) faces.push(f);
     }
-    // Shuffle for visual randomness
+    // Shuffle
     faces.sort(() => Math.random() - 0.5);
 
     faces.forEach(faceVal => {
         const d = document.createElement('div');
-        d.className = `dice face-${faceVal}`;
+        // Map face val to class
+        const faceClasses = ['first-face', 'second-face', 'third-face', 'fourth-face', 'fifth-face', 'sixth-face'];
+        d.className = `dice ${faceClasses[faceVal - 1]}`;
+
         d.innerHTML = createDots(faceVal);
         bowl.appendChild(d);
     });
 }
 
 function createDots(face) {
-    let html = '';
-    const isRed = (face === 1 || face === 4);
-    const colorClass = isRed ? 'red' : 'black';
-    // For 1 and 4, all dots are red. For others, usually black? 
-    // Wait, typical Chinese dice: 1 is big red, 4 is red. 
-    // Others are black.
+    const isOdd = face % 2 !== 0; // 1, 3, 5 are odd
+    const colorClass = isOdd ? 'red' : 'black';
+    const dotHtml = `<span class="dot ${colorClass}"></span>`;
 
-    // Logic:
-    let dotColor = (face === 1 || face === 4) ? 'red' : 'black';
+    // Helper to generic N dots
+    const dots = (n) => Array(n).fill(dotHtml).join('');
 
-    for (let i = 0; i < face; i++) {
-        html += `<div class="dot ${dotColor}"></div>`;
+    // Faces structure
+    if (face === 1) return dots(1);
+    if (face === 2) return dots(2);
+    if (face === 3) return dots(3);
+
+    if (face === 4) {
+        return `
+            <div class="column">${dots(2)}</div>
+            <div class="column">${dots(2)}</div>
+        `;
     }
-    return html;
+
+    if (face === 5) {
+        return `
+            <div class="column">${dots(2)}</div>
+            <div class="column">${dots(1)}</div>
+            <div class="column">${dots(2)}</div>
+        `;
+    }
+
+    if (face === 6) {
+        return `
+            <div class="column">${dots(3)}</div>
+            <div class="column">${dots(3)}</div>
+        `;
+    }
+    return '';
 }
 
 function logResult(res) {
@@ -129,7 +163,8 @@ function logResult(res) {
     const li = document.createElement('li');
     // Compact log
     const diceStr = res.counts.slice(1).map((c, i) => c > 0 ? `${i + 1}:${c}` : '').filter(s => s).join(', ');
-    li.innerHTML = `Roll: [${diceStr}] &rarr; <b>${res.bestEvent}</b> (x${res.payout})`;
+    const outcomeClass = res.payout > 0 ? 'win' : 'lose';
+    li.innerHTML = `<span class="log-dice">[${diceStr}]</span> <span class="log-outcome ${outcomeClass}">${res.bestEvent} (x${res.payout})</span>`;
     list.prepend(li);
 }
 
@@ -141,12 +176,15 @@ btnSolve.addEventListener('click', () => {
     const rate = parseFloat(targetRateInput.value);
 
     btnSolve.innerText = "Solving...";
+    btnSolve.disabled = true;
+
     setTimeout(() => {
         const p4Found = engine.solveP4(evap, rate);
         // Apply
         setParams(p4Found);
         btnSolve.innerText = "Tìm p4";
-        alert(`Found p4 = ${p4Found.toFixed(6)} for P(${evap}) >= ${rate}`);
+        btnSolve.disabled = false;
+        // Optional: toast or highlight effect
     }, 50);
 });
 
@@ -209,12 +247,16 @@ btnRunMC.addEventListener('click', () => {
             hits[ev] = (hits[ev] || 0) + 1;
         }
 
-        let html = `Trials: ${n}<br>`;
+        let html = `<div class="mc-summary">Trials: <b>${n}</b></div>`;
+        html += `<table class="mc-table"><thead><tr><th>Event</th><th>Prob (%)</th></tr></thead><tbody>`;
+
         // Sort by frequency
         Object.entries(hits).sort((a, b) => b[1] - a[1]).forEach(([ev, count]) => {
-            html += `${ev}: ${((count / n) * 100).toFixed(2)}%<br>`;
+            let percent = ((count / n) * 100).toFixed(2);
+            html += `<tr><td>${ev}</td><td>${percent}%</td></tr>`;
         });
 
+        html += `</tbody></table>`;
         mcStatsDiv.innerHTML = html;
     }, 50);
 });
