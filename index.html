@@ -21,6 +21,10 @@
                     <h1>Xăm Hường Research</h1>
                 </div>
                 <div class="economy-hud">
+                    <div class="hud-item user-profile">
+                        <label>Player</label>
+                        <span id="player-name-display" class="hud-val">Royal Player</span>
+                    </div>
                     <div class="hud-item">
                         <label>Balance:</label>
                         <span id="balance-display" class="hud-val">1,000</span>
@@ -34,7 +38,7 @@
                         <input type="number" id="bet-input" value="10" min="1" step="10">
                     </div>
                 </div>
-                <div class="version-tag">Digital Heritage v3.0</div>
+                <div class="version-tag">Royal Edition v3.5</div>
             </div>
 
             <nav class="main-tabs">
@@ -97,31 +101,38 @@
                     </div>
                     <div class="panel stats-panel">
                         <h3>Engine Metrics</h3>
-                        <div id="engine-metrics" class="metrics-list">
-                            <!-- JS injected -->
+                        <div id="engine-metrics" class="metrics-list"></div>
+                    </div>
+                </div>
+
+                <!-- Advanced Analytics Row -->
+                <div class="analysis-grid three-col">
+                    <div class="panel heatmap-panel">
+                        <h3>Face Frequency Heatmap (Last 10k)</h3>
+                        <div id="heatmap-grid" class="heatmap-grid"></div>
+                    </div>
+
+                    <div class="panel equity-panel">
+                        <h3>Equity Curve</h3>
+                        <canvas id="equity-chart"></canvas>
+                    </div>
+
+                    <div class="panel risk-panel">
+                        <h3>Risk of Ruin Calculator</h3>
+                        <div id="risk-form" class="risk-form">
+                            <label>Balance</label>
+                            <input type="number" id="rr-balance" value="1000">
+                            <label>Bet Size</label>
+                            <input type="number" id="rr-bet" value="50">
+                            <label>Target Profit</label>
+                            <input type="number" id="rr-target" value="1000">
+                            <button id="btn-calc-risk" class="btn-secondary">Calculate Risk</button>
+                            <div id="risk-result" class="result-display">--</div>
                         </div>
                     </div>
                 </div>
-                <div class="analysis-grid secondary">
-                    <div class="panel research-panel">
-                        <h3>Mathematical Insights</h3>
-                        <div class="metrics-grid">
-                            <div class="research-item">
-                                <label>Volatility Index</label>
-                                <span id="metric-volatility">--</span>
-                            </div>
-                            <div class="research-item">
-                                <label>Shannon Entropy</label>
-                                <span id="metric-entropy">--</span>
-                            </div>
-                            <div class="research-item">
-                                <label>Risk of Ruin (50% target)</label>
-                                <span id="metric-ruin">--</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="panel heatmap-panel">
+
+                <div class="panel heatmap-panel full-width">
                     <h3>Conditional Probability Matrix</h3>
                     <div class="cond-tools">
                         <span>Given first 2 dice: </span>
@@ -130,6 +141,32 @@
                     </div>
                     <div id="cond-prob-output" class="prob-results"></div>
                 </div>
+                <!-- Session Insights -->
+                <div class="analysis-grid">
+                    <div class="panel stats-card">
+                        <h3>Session Streaks</h3>
+                        <div id="session-streaks" class="streaks-display">
+                            <div class="streak-item">
+                                <label>Current</label>
+                                <span id="strk-current" class="val neutral">0</span>
+                            </div>
+                            <div class="streak-item">
+                                <label>Best Win</label>
+                                <span id="strk-max-win" class="val win">0</span>
+                            </div>
+                            <div class="streak-item">
+                                <label>Worst Loss</label>
+                                <span id="strk-max-loss" class="val loss">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="panel logs-panel">
+                        <h3>Live Transaction Log</h3>
+                        <div id="session-logs" class="logs-list">
+                            <!-- Logs injected here -->
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <!-- HERITAGE VIEW -->
@@ -137,9 +174,7 @@
                 <div class="heritage-explorer">
                     <div class="preset-selector">
                         <h3>Heritage Presets</h3>
-                        <div id="heritage-list" class="preset-btns">
-                            <!-- JS injected -->
-                        </div>
+                        <div id="heritage-list" class="preset-btns"></div>
                     </div>
                     <div id="heritage-details" class="heritage-info">
                         <h3>Ancient Context</h3>
@@ -160,9 +195,7 @@
                         </div>
                         <div class="dice-weights-config">
                             <label>Face Probabilities:</label>
-                            <div id="weight-inputs" class="weight-grid">
-                                <!-- JS injected -->
-                            </div>
+                            <div id="weight-inputs" class="weight-grid"></div>
                         </div>
                         <div id="prob-sum-display" class="sum-check">Total: 1.00</div>
                         <button id="btn-apply-config" class="btn-primary">Sync Engine</button>
@@ -175,9 +208,7 @@
                                 <option value="winrate">Solve for Win Rate</option>
                                 <option value="edge">Solve for House Edge</option>
                             </select>
-                            <div id="solver-target-area">
-                                <!-- Inputs change on mode -->
-                            </div>
+                            <div id="solver-target-area"></div>
                             <button id="btn-solve" class="btn-gold">Run Optimization</button>
                         </div>
                     </div>
@@ -187,7 +218,7 @@
 
         <footer class="app-footer">
             <div id="log-status">Ready.</div>
-            <button id="btn-export" class="btn-text">Export CSV Data</button>
+            <button id="btn-export" class="btn-text">Export Session Data</button>
         </footer>
     </div>
 

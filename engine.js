@@ -2,21 +2,202 @@ const FACES = [1, 2, 3, 4, 5, 6];
 const HUONG_FACE = 4;
 
 /**
+ * Player Class - Manages individual player state
+ */
+class Player {
+    constructor(id, name, balance = 1000, avatar = '👤') {
+        this.id = id;
+        this.name = name;
+        this.balance = balance;
+        this.avatar = avatar;
+        this.history = []; // [{ turn, event, change, balance }]
+    }
+
+    addTransaction(turn, event, amount) {
+        this.balance += amount;
+        this.history.push({
+            timestamp: new Date().toISOString(),
+            turn: turn,
+            event: event,
+            change: amount,
+            newBalance: this.balance
+        });
+    }
+}
+
+/**
+ * GameSession - Manages the Multiplayer Game Loop & Economy
+ */
+/**
+ * XamHuongSession - Manages the Multiplayer Game Loop & Economy
+ */
+class XamHuongSession {
+    constructor(engine) {
+        this.engine = engine;
+        this.players = [];
+        this.currentPlayerIndex = 0;
+        this.turnCount = 0;
+        this.jackpot = 5000; // Global Jackpot
+        this.minBet = 10;
+        this.logs = [];
+
+        // Streak Stats
+        this.currentStreak = 0; // >0 for Win, <0 for Loss
+        this.maxWinStreak = 0;
+        this.maxLossStreak = 0;
+    }
+
+    addPlayer(player) {
+        this.players.push(player);
+    }
+
+    getCurrentPlayer() {
+        return this.players[this.currentPlayerIndex];
+    }
+
+    nextTurn() {
+        this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+        if (this.currentPlayerIndex === 0) this.turnCount++;
+        return this.getCurrentPlayer();
+    }
+
+    processBet(amount) {
+        const player = this.getCurrentPlayer();
+        if (player.balance < amount) throw new Error("Insufficient balance");
+
+        player.addTransaction(this.turnCount, "BET", -amount);
+
+        // Economy: 5% to Jackpot
+        const jackpotCont = amount * 0.05;
+        this.jackpot += jackpotCont;
+
+        return { bet: amount, jackpotContribution: jackpotCont };
+    }
+
+    resolveRoll(amount) {
+        const result = this.engine.simulate();
+        const player = this.getCurrentPlayer();
+        const ruleId = result.bestEvent;
+        const rule = this.engine.rules.find(r => r.id === ruleId);
+
+        let payout = 0;
+        let isJackpotWin = false;
+
+        if (rule) {
+            // Check for Jackpot Win (Luc Huong - 6 Reds)
+            if (ruleId === 'LUC_HUONG') {
+                payout = this.jackpot;
+                isJackpotWin = true;
+                this.jackpot = 5000; // Reset to seed
+            } else {
+                payout = amount * result.payout;
+            }
+        }
+
+        const netChange = -amount + payout;
+
+        // Streak Logic
+        if (netChange > 0) {
+            if (this.currentStreak < 0) this.currentStreak = 0;
+            this.currentStreak++;
+            if (this.currentStreak > this.maxWinStreak) this.maxWinStreak = this.currentStreak;
+        } else if (netChange < 0) {
+            if (this.currentStreak > 0) this.currentStreak = 0;
+            this.currentStreak--;
+            if (Math.abs(this.currentStreak) > this.maxLossStreak) this.maxLossStreak = Math.abs(this.currentStreak);
+        }
+
+        if (payout > 0) {
+            player.addTransaction(this.turnCount, isJackpotWin ? "JACKPOT" : "WIN_" + ruleId, payout);
+        }
+
+        this.logTransaction(player, rule ? rule.name : "None", amount, netChange, player.balance);
+
+        return {
+            ...result,
+            payout,
+            isJackpotWin,
+            player,
+            newBalance: player.balance,
+            globalJackpot: this.jackpot,
+            streaks: {
+                current: this.currentStreak,
+                maxWin: this.maxWinStreak,
+                maxLoss: this.maxLossStreak
+            }
+        };
+    }
+
+    logTransaction(player, resultName, bet, netChange, newBalance) {
+        const log = {
+            timestamp: new Date().toLocaleTimeString(),
+            player: player.name,
+            result: resultName,
+            bet: bet,
+            change: netChange,
+            balance: newBalance,
+            isWin: netChange >= 0
+        };
+        this.logs.unshift(log); // Store object instead of string for better UI rendering
+        if (this.logs.length > 50) this.logs.pop();
+    }
+
+    exportState() {
+        return {
+            players: this.players,
+            jackpot: this.jackpot,
+            turnCount: this.turnCount,
+            currentPlayerIndex: this.currentPlayerIndex,
+            logs: this.logs,
+            stats: {
+                currentStreak: this.currentStreak,
+                maxWinStreak: this.maxWinStreak,
+                maxLossStreak: this.maxLossStreak
+            }
+        };
+    }
+
+    importState(data) {
+        if (!data) return;
+        this.jackpot = data.jackpot || 5000;
+        this.turnCount = data.turnCount || 0;
+        this.currentPlayerIndex = data.currentPlayerIndex || 0;
+        this.logs = data.logs || [];
+
+        if (data.stats) {
+            this.currentStreak = data.stats.currentStreak || 0;
+            this.maxWinStreak = data.stats.maxWinStreak || 0;
+            this.maxLossStreak = data.stats.maxLossStreak || 0;
+        }
+
+        // Rehydrate players
+        if (data.players) {
+            this.players = data.players.map(p => {
+                const np = new Player(p.id, p.name, p.balance, p.avatar);
+                np.history = p.history || [];
+                return np;
+            });
+        }
+    }
+}
+
+/**
  * XamHuongEngine - Core Probability & Logic Engine
  */
 class XamHuongEngine {
     constructor(numDice = 6, customRules = null) {
         this.numDice = numDice;
-        // faceWeights[1..6], 0-indexed for internal use 0..5 or 1..6? 
-        // Let's use 1-indexed for consistency with dice faces.
         this.faceWeights = [0, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6];
         this.rules = customRules || [];
         if (this.rules.length === 0) this.initDefaultRules();
+
+        // Analytics History (for Heatmaps)
+        this.rollHistory = []; // { counts: [], timestamp }
     }
 
     initDefaultRules() {
         this.rules = [
-            { id: "LUC_HUONG", name: "Lục Hường", score: 100, check: (c) => c[4] === 6 },
+            { id: "LUC_HUONG", name: "Lục Hường (Jackpot)", score: 100, check: (c) => c[4] === 6 },
             {
                 id: "LUC_PHU", name: "Lục Phú", score: 50, check: (c) => {
                     for (let i = 1; i <= 6; i++) if (i !== 4 && c[i] === 6) return true;
@@ -62,7 +243,6 @@ class XamHuongEngine {
     }
 
     setWeights(weights) {
-        // weights array [p1, p2, p3, p4, p5, p6]
         let sum = weights.reduce((a, b) => a + b, 0);
         if (sum === 0) {
             this.faceWeights = [0, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6];
@@ -97,7 +277,26 @@ class XamHuongEngine {
                 }
             }
         }
+
+        // Record for Heatmap
+        this.recordRoll(counts);
+
         return { counts, ...this.resolveRound(counts) };
+    }
+
+    recordRoll(counts) {
+        this.rollHistory.push(counts);
+        if (this.rollHistory.length > 10000) this.rollHistory.shift();
+    }
+
+    getFaceFrequency() {
+        if (this.rollHistory.length === 0) return [0, 0, 0, 0, 0, 0];
+        const totals = [0, 0, 0, 0, 0, 0, 0];
+        this.rollHistory.forEach(c => {
+            for (let f = 1; f <= 6; f++) totals[f] += c[f];
+        });
+        const totalRolls = this.rollHistory.length * this.numDice;
+        return totals.slice(1).map(t => t / totalRolls);
     }
 
     resolveRound(counts) {
@@ -159,6 +358,8 @@ class XamHuongEngine {
             const prob = (f[this.numDice] / denom) * probTerm;
 
             const res = this.resolveRound(counts);
+            // EV calculation uses raw score, but prompt implies custom economy. 
+            // We use Rule Score as multiplier for EV calc.
             ev += prob * res.payout;
             secondMoment += prob * (res.payout * res.payout);
 
@@ -175,7 +376,7 @@ class XamHuongEngine {
         return {
             ev,
             stats: eventProbs,
-            houseEdge: (100 - ev) / 100,
+            houseEdge: (100 - ev) / 100, // Roughly
             volatility,
             entropy: this.calculateEntropy()
         };
@@ -192,8 +393,8 @@ class XamHuongEngine {
 
     calculateRiskOfRuin(balance, bet, targetProfit) {
         const stats = this.calculateStats();
-        const winProb = Object.values(stats.stats).filter((k) => !k.startsWith('BEST_')).reduce((a, b) => a + b, 0);
-        // This is tricky because we have multiple events. Let's use 1 - P(NONE)
+        // Simplified Logic for RoR
+        // P(Win) approx by any payout
         const probNone = stats.stats['BEST_NONE'] || 0;
         const pWin = 1 - probNone;
         const pLoss = probNone;
@@ -208,36 +409,6 @@ class XamHuongEngine {
         return Math.max(0, Math.min(1, prob));
     }
 
-    /**
-     * DP approach for a specific face (e.g. Hường count distribution)
-     * O(N) instead of O(N^5) partition complexity.
-     * Useful for heatmaps of single-variable rules.
-     */
-    getFaceCountDistribution(faceIndex, nOverride = null) {
-        const n = nOverride !== null ? nOverride : this.numDice;
-        const p = this.faceWeights[faceIndex];
-        const dist = new Array(n + 1).fill(0);
-
-        // Binomial(n, p) = nCr * p^r * (1-p)^(n-r)
-        // We can use DP to calculate binomial coeffs or just direct formula for stability
-        const combinations = (n, k) => {
-            if (k < 0 || k > n) return 0;
-            if (k === 0 || k === n) return 1;
-            if (k > n / 2) k = n - k;
-            let res = 1;
-            for (let i = 1; i <= k; i++) res = res * (n - i + 1) / i;
-            return res;
-        };
-
-        for (let k = 0; k <= n; k++) {
-            dist[k] = combinations(n, k) * Math.pow(p, k) * Math.pow(1 - p, n - k);
-        }
-        return dist;
-    }
-
-    /**
-     * Conditional Stats: P(Event | subset)
-     */
     getConditionalStats(fixedDice) {
         const remaining = this.numDice - fixedDice.length;
         if (remaining < 0) return {};
@@ -245,16 +416,7 @@ class XamHuongEngine {
         const baseCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
         fixedDice.forEach(d => baseCounts[d]++);
 
-        const tempEngine = new XamHuongEngine(remaining);
-        tempEngine.setWeights(this.faceWeights.slice(1));
-        const subStats = tempEngine.calculateStats();
-
-        // This calculateStats gives probs for 'remaining' dice.
-        // We need to map these back to 'total' dice outcomes.
-        // Actually, calculateStats on remaining dice gives P(subcounts).
-        // The events it records are relative to subcounts.
-        // We need a custom loop here.
-
+        // Recursive partition generation for remaining
         const partitions = [];
         const generate = (index, rem, current) => {
             if (index === 6) {
@@ -293,9 +455,6 @@ class XamHuongEngine {
         return condProbs;
     }
 
-    /**
-     * Solver: Find p4 for target win rate of an event
-     */
     solveP4(eventId, targetRate) {
         let low = 0, high = 1;
         for (let i = 0; i < 20; i++) {
@@ -307,7 +466,7 @@ class XamHuongEngine {
             else high = mid;
         }
         const best = high;
-        this.setP4(1 / 6); // Reset or leave?
+        this.setP4(1 / 6);
         return best;
     }
 
@@ -317,6 +476,7 @@ class XamHuongEngine {
             let mid = (low + high) / 2;
             this.setP4(mid);
             let stats = this.calculateStats();
+            // Simplify House Edge logic approximation
             if (stats.houseEdge > targetEdge) low = mid;
             else high = mid;
         }
