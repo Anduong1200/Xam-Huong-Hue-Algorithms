@@ -94,22 +94,31 @@ h1 {
     margin: 6px;
     display: grid;
     grid-template-areas: "a b c" "d e f" "g h i";
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
     padding: 4px;
     box-sizing: border-box;
     transition: transform 0.2s;
+    align-items: center;
+    justify-items: center;
+    position: relative;
 }
 
 .dice:hover {
     transform: scale(1.1);
 }
 
+/* Dot base */
 .dot {
     width: 9px;
     height: 9px;
     border-radius: 50%;
     margin: auto;
+    display: none; /* mặc định ẩn, bật theo face */
+    box-sizing: border-box;
 }
 
+/* color variants */
 .dot.black {
     background-color: #222;
 }
@@ -118,59 +127,73 @@ h1 {
     background-color: #d32f2f;
 }
 
-/* Face Configs */
-.face-1 {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
+/* Map 9 dot children to grid areas a..i */
+.dice .dot:nth-child(1) { grid-area: a; }
+.dice .dot:nth-child(2) { grid-area: b; }
+.dice .dot:nth-child(3) { grid-area: c; }
+.dice .dot:nth-child(4) { grid-area: d; }
+.dice .dot:nth-child(5) { grid-area: e; }
+.dice .dot:nth-child(6) { grid-area: f; }
+.dice .dot:nth-child(7) { grid-area: g; }
+.dice .dot:nth-child(8) { grid-area: h; }
+.dice .dot:nth-child(9) { grid-area: i; }
 
-.face-1 .dot {
+/* --- Face rules: bật vị trí cần thiết --- */
+
+/* Face 1: 1 chấm giữa */
+.face-1 .dot { display: none; }
+.face-1 .dot:nth-child(5) {
+    display: block;
     width: 16px;
     height: 16px;
 }
 
-.face-2,
-.face-3,
-.face-4,
-.face-5,
-.face-6 {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-content: space-between;
+/* Face 2: 2 chấm chéo (a, i) */
+.face-2 .dot { display: none; }
+.face-2 .dot:nth-child(1),
+.face-2 .dot:nth-child(9) {
+    display: block;
 }
 
-.face-2 .dot:nth-child(1) {
-    align-self: flex-start;
+/* Face 3: 3 chấm đường chéo (a, e, i) */
+.face-3 .dot { display: none; }
+.face-3 .dot:nth-child(1),
+.face-3 .dot:nth-child(5),
+.face-3 .dot:nth-child(9) {
+    display: block;
 }
 
-.face-2 .dot:nth-child(2) {
-    align-self: flex-end;
+/* Face 4: 4 góc (a, c, g, i) */
+.face-4 .dot { display: none; }
+.face-4 .dot:nth-child(1),
+.face-4 .dot:nth-child(3),
+.face-4 .dot:nth-child(7),
+.face-4 .dot:nth-child(9) {
+    display: block;
 }
 
-.face-3 .dot:nth-child(1) {
-    align-self: flex-start;
-}
-
-.face-3 .dot:nth-child(2) {
-    align-self: center;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
-
-.face-3 .dot:nth-child(3) {
-    align-self: flex-end;
-}
-
+/* Face 5: 4 góc + giữa (a, c, e, g, i) */
+.face-5 .dot { display: none; }
+.face-5 .dot:nth-child(1),
+.face-5 .dot:nth-child(3),
+.face-5 .dot:nth-child(7),
+.face-5 .dot:nth-child(9),
 .face-5 .dot:nth-child(5) {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    display: block;
 }
+.face-5 .dot:nth-child(5) { width: 12px; height: 12px; } /* giữa hơi lớn */
+
+/* Face 6: hai cột 3 chấm (a,d,g) và (c,f,i) */
+.face-6 .dot { display: none; }
+.face-6 .dot:nth-child(1),
+.face-6 .dot:nth-child(4),
+.face-6 .dot:nth-child(7),
+.face-6 .dot:nth-child(3),
+.face-6 .dot:nth-child(6),
+.face-6 .dot:nth-child(9) {
+    display: block;
+}
+
 
 /* Controls */
 .controls {

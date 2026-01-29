@@ -32,8 +32,6 @@ Một dự án mô phỏng hiện đại trò chơi **Xăm Hường** truyền t
 Dự án đi kèm với bộ tài liệu phân tích:
 
 - **[simulation_report.md](./simulation_report.md)**: Báo cáo phân tích toán học, bảng xác suất chi tiết và chiến lược cân bằng game.
-- **[walkthrough.md](./walkthrough.md)**: Hướng dẫn chi tiết các tính năng và cách vận hành.
-- **[implementation_plan.md](./implementation_plan.md)**: Kế hoạch phát triển kỹ thuật.
 
 ## 🛠️ Công Nghệ
 
