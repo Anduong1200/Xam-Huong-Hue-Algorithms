@@ -1,98 +1,168 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xăm Hường Huế Simulation</title>
+    <title>Xăm Hường Research Platform - Royal Edition</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Xăm Hường Huế</h1>
-            <div class="subtitle">Mô phỏng & Phân tích Xác suất</div>
+
+<body class="royal-theme">
+    <div class="glass-container">
+        <header class="app-header">
+            <div class="header-content">
+                <div class="brand">
+                    <span class="symbol">⚜️</span>
+                    <h1>Xăm Hường Research</h1>
+                </div>
+                <div class="version-tag">Digital Heritage v2.0</div>
+            </div>
+
+            <nav class="main-tabs">
+                <button class="tab-btn active" data-tab="play">🎮 Play</button>
+                <button class="tab-btn" data-tab="sandbox">🧪 Sandbox</button>
+                <button class="tab-btn" data-tab="analysis">📊 Analytics</button>
+                <button class="tab-btn" data-tab="heritage">📜 Heritage</button>
+                <button class="tab-btn" data-tab="config">⚙️ Engine</button>
+            </nav>
         </header>
 
-        <main>
-            <!-- Game Area -->
-            <section class="game-area">
-                <div class="bowl-container">
-                    <div id="bowl" class="bowl">
-                        <!-- Dice will be injected here -->
-                        <div class="dice-placeholder">Sẵn sàng</div>
+        <main class="content-view">
+            <!-- PLAY VIEW -->
+            <section id="tab-play" class="tab-content active">
+                <div class="game-dashboard">
+                    <div class="bowl-area">
+                        <div id="bowl" class="royal-bowl">
+                            <div class="placeholder">Thả hột...</div>
+                        </div>
+                        <div class="bowl-shadow"></div>
                     </div>
-                </div>
 
-                <div class="controls">
-                    <button id="btn-roll" class="btn-primary">Đổ Hột (Roll)</button>
-                    <div class="bet-info">
-                        Đặt cược: <span id="bet-amount">1</span> xu
+                    <div class="game-controls">
+                        <button id="btn-roll" class="btn-royal">Roll Dice</button>
+                        <div class="result-card">
+                            <div id="result-text" class="result-title">---</div>
+                            <div id="payout-display" class="payout-badge">0x</div>
+                        </div>
                     </div>
-                </div>
-
-                <div id="result-display" class="result-box">
-                    Kết quả: <span id="result-text">---</span>
-                    <div id="payout-display" class="payout-text">Payout: 0x</div>
                 </div>
             </section>
 
-            <!-- Analysis & Config Panel -->
-            <section class="analysis-panel">
-                <div class="tabs">
-                    <button class="tab-btn active" data-tab="config">Cấu hình (Config)</button>
-                    <button class="tab-btn" data-tab="analysis">Phân tích (Analysis)</button>
-                    <button class="tab-btn" data-tab="log">Nhật ký (Log)</button>
+            <!-- SANDBOX VIEW -->
+            <section id="tab-sandbox" class="tab-content">
+                <div class="sandbox-header">
+                    <h2>Dice Sandbox</h2>
+                    <p>Directly manipulate dice state to test rule classification.</p>
                 </div>
-
-                <div id="tab-config" class="tab-content active">
-                    <div class="config-group">
-                        <label>Độ lệch mặt Hường (p4): <span id="p4-val-display">0.1667</span></label>
-                        <input type="range" id="p4-slider" min="0.05" max="0.5" step="0.001" value="0.1666667">
-                        <div class="presets">
-                            <button class="btn-small" onclick="setParams(0.166667)">Chuẩn (1/6)</button>
-                            <button class="btn-small" onclick="setParams(0.222584)">K≥2 (40%)</button>
-                            <button class="btn-small" onclick="setParams(0.264450)">K≥2 (50%)</button>
-                        </div>
+                <div id="sandbox-board" class="sandbox-grid">
+                    <!-- Dynamic Dice -->
+                </div>
+                <div class="sandbox-info">
+                    <div class="info-item">
+                        <label>Classification:</label>
+                        <span id="sandbox-outcome" class="highlight">None</span>
                     </div>
-                    <div class="config-group">
-                        <label>Mục tiêu Win-Rate (Solver):</label>
-                        <div class="solver-controls">
-                            <select id="target-event">
-                                <option value="K>=2">K >= 2</option>
-                                <option value="K>=3">K >= 3</option>
-                            </select>
-                            <input type="number" id="target-rate" value="0.4" step="0.05" min="0.1" max="0.9">
-                            <button id="btn-solve" class="btn-secondary">Tìm p4</button>
-                        </div>
+                    <div class="info-item">
+                        <label>Royal Score:</label>
+                        <span id="sandbox-score" class="highlight">0</span>
                     </div>
                 </div>
+            </section>
 
-                <div id="tab-analysis" class="tab-content">
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3>Lý thuyết (Exact)</h3>
-                            <div id="exact-stats">Calculating...</div>
+            <!-- ANALYSIS VIEW -->
+            <section id="tab-analysis" class="tab-content">
+                <div class="analysis-grid">
+                    <div class="panel chart-panel">
+                        <h3>Probability Distribution</h3>
+                        <canvas id="dist-chart"></canvas>
+                    </div>
+                    <div class="panel stats-panel">
+                        <h3>Engine Metrics</h3>
+                        <div id="engine-metrics" class="metrics-list">
+                            <!-- JS injected -->
                         </div>
-                        <div class="stat-card">
-                            <h3>Mô phỏng (Monte Carlo)</h3>
-                            <div class="mc-controls">
-                                <input type="number" id="mc-trials" value="10000"> lượt
-                                <button id="btn-run-mc" class="btn-secondary">Chạy thử</button>
+                    </div>
+                </div>
+                <div class="panel heatmap-panel">
+                    <h3>Conditional Probability Matrix</h3>
+                    <div class="cond-tools">
+                        <span>Given first 2 dice: </span>
+                        <span id="cond-prob-setup" class="dice-set"></span>
+                        <button id="btn-calc-cond" class="btn-secondary">Re-calculate</button>
+                    </div>
+                    <div id="cond-prob-output" class="prob-results"></div>
+                </div>
+            </section>
+
+            <!-- HERITAGE VIEW -->
+            <section id="tab-heritage" class="tab-content">
+                <div class="heritage-explorer">
+                    <div class="preset-selector">
+                        <h3>Heritage Presets</h3>
+                        <div id="heritage-list" class="preset-btns">
+                            <!-- JS injected -->
+                        </div>
+                    </div>
+                    <div id="heritage-details" class="heritage-info">
+                        <h3>Ancient Context</h3>
+                        <div id="heritage-desc" class="desc-text">Select a preset to explore its historical context.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CONFIG VIEW -->
+            <section id="tab-config" class="tab-content">
+                <div class="engine-config">
+                    <div class="config-card">
+                        <h3>Global Parameters</h3>
+                        <div class="input-row">
+                            <label>Dice Count (N):</label>
+                            <input type="number" id="dice-count-input" value="6" min="1" max="20">
+                        </div>
+                        <div class="dice-weights-config">
+                            <label>Face Probabilities:</label>
+                            <div id="weight-inputs" class="weight-grid">
+                                <!-- JS injected -->
                             </div>
-                            <div id="mc-stats">---</div>
+                        </div>
+                        <div id="prob-sum-display" class="sum-check">Total: 1.00</div>
+                        <button id="btn-apply-config" class="btn-primary">Sync Engine</button>
+                    </div>
+
+                    <div class="config-card">
+                        <h3>Parameter Solver</h3>
+                        <div class="solver-ui">
+                            <select id="solver-mode">
+                                <option value="winrate">Solve for Win Rate</option>
+                                <option value="edge">Solve for House Edge</option>
+                            </select>
+                            <div id="solver-target-area">
+                                <!-- Inputs change on mode -->
+                            </div>
+                            <button id="btn-solve" class="btn-gold">Run Optimization</button>
                         </div>
                     </div>
-                </div>
-
-                <div id="tab-log" class="tab-content">
-                    <ul id="game-log" class="log-list"></ul>
                 </div>
             </section>
         </main>
+
+        <footer class="app-footer">
+            <div id="log-status">Ready.</div>
+            <button id="btn-export" class="btn-text">Export CSV Data</button>
+        </footer>
     </div>
 
+    <!-- Core Scripts -->
+    <script src="logic/rules.js"></script>
+    <script src="logic/heritage.js"></script>
     <script src="engine.js"></script>
     <script src="script.js"></script>
 </body>
+
 </html>

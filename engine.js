@@ -1,254 +1,291 @@
-/**
- * Xăm Hường Engine - Core Logic
- * Implements advanced probability model and event predicates.
- */
-
 const FACES = [1, 2, 3, 4, 5, 6];
 const HUONG_FACE = 4;
 
-// Default Paytable (Configurable)
-const DEFAULT_PAYTABLE = {
-    "LUC_HUONG": 100.0,
-    "NGU_HUONG": 60.0,
-    "TU_HUONG": 30.0,
-    "PHAN_SONG_TAM": 20.0, // 3 Hường + 3 Same
-    "TAM_HUONG": 8.0,
-    "K=3": 3.0, // Generic 3 Hường (nếu ko phải Phân Song Tam)
-    "K=2": 1.0, // Nhị Hường
-    "K=1": 0.0, // Nhất Hường (thường là hòa hoặc tính điểm nhỏ)
-    "SUUT": 10.0,
-    "THUONG_HA_MA": 5.0, // 3 Pairs
-    "NGU_TU": 10.0,      // 5 same (non-huong)
-    "LUC_PHU": 50.0,     // 6 same (non-huong)
-    "NO_EVENT": 0.0
-};
-
-// Priority for display/payout (Highest matches first)
-const PRIORITY_ORDER = [
-    "LUC_HUONG",
-    "LUC_PHU",
-    "NGU_HUONG",
-    "NGU_TU",
-    "PHAN_SONG_TAM",
-    "TU_HUONG",
-    "SUUT",
-    "THUONG_HA_MA", // 3 Pairs
-    "TAM_HUONG",
-    "K=3",
-    "K=2",
-    "K=1"
-];
-
+/**
+ * XamHuongEngine - Core Probability & Logic Engine
+ */
 class XamHuongEngine {
-    constructor() {
-        this.p4 = 0.1666667; // Default 1/6
-        this.paytable = { ...DEFAULT_PAYTABLE };
+    constructor(numDice = 6, customRules = null) {
+        this.numDice = numDice;
+        // faceWeights[1..6], 0-indexed for internal use 0..5 or 1..6? 
+        // Let's use 1-indexed for consistency with dice faces.
+        this.faceWeights = [0, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6];
+        this.rules = customRules || [];
+        if (this.rules.length === 0) this.initDefaultRules();
     }
 
-    setParams(p4, paytable) {
-        this.p4 = p4;
-        if (paytable) this.paytable = paytable;
-    }
-
-    /**
-     * Classifier F: Maps count vector to Outcome Classes.
-     * @param {number[]} counts - Array size 7 (index 1-6).
-     * @returns {string[]} List of applicable tags.
-     */
-    classify(counts) {
-        const K = counts[HUONG_FACE]; // Count of face 4
-        let events = [];
-
-        // --- 1. Hường-based Logic (K) ---
-        if (K === 6) events.push("LUC_HUONG");
-        if (K === 5) events.push("NGU_HUONG");
-
-        if (K === 4) {
-            events.push("TU_HUONG");
-            // Check Tứ Tự Cáp logic here if needed (e.g., sum of other 2)
-            // For now, base Tứ Hường is the primary event.
-        }
-
-        if (K === 3) {
-            // Check Phân Song Tam: 3 Hường + 3 others same
-            let other3Same = false;
-            for (let f = 1; f <= 6; f++) {
-                if (f !== HUONG_FACE && counts[f] === 3) {
-                    other3Same = true; break;
+    initDefaultRules() {
+        this.rules = [
+            { id: "LUC_HUONG", name: "Lục Hường", score: 100, check: (c) => c[4] === 6 },
+            {
+                id: "LUC_PHU", name: "Lục Phú", score: 50, check: (c) => {
+                    for (let i = 1; i <= 6; i++) if (i !== 4 && c[i] === 6) return true;
+                    return false;
                 }
-            }
-            if (other3Same) events.push("PHAN_SONG_TAM");
-            events.push("TAM_HUONG"); // Specific name
-            events.push("K=3");       // Generic Class
+            },
+            { id: "NGU_HUONG", name: "Ngũ Hường", score: 60, check: (c) => c[4] === 5 },
+            {
+                id: "NGU_TU", name: "Ngũ Tử", score: 10, check: (c) => {
+                    for (let i = 1; i <= 6; i++) if (i !== 4 && c[i] === 5) return true;
+                    return false;
+                }
+            },
+            { id: "TU_HUONG", name: "Tứ Hường", score: 30, check: (c) => c[4] === 4 },
+            {
+                id: "PHAN_SONG_TAM", name: "Phân Song Tam", score: 20, check: (c) => {
+                    if (c[4] !== 3) return false;
+                    for (let i = 1; i <= 6; i++) if (i !== 4 && c[i] === 3) return true;
+                    return false;
+                }
+            },
+            {
+                id: "SUUT", name: "Suốt", score: 10, check: (c) => {
+                    for (let i = 1; i <= 6; i++) if (c[i] !== 1) return false;
+                    return true;
+                }
+            },
+            {
+                id: "THUONG_HA_MA", name: "Thượng Hạ Mã", score: 5, check: (c) => {
+                    let pairs = 0;
+                    for (let i = 1; i <= 6; i++) if (c[i] === 2) pairs++;
+                    return pairs === 3;
+                }
+            },
+            { id: "TAM_HUONG", name: "Tam Hường", score: 8, check: (c) => c[4] === 3 },
+            { id: "NHI_HUONG", name: "Nhị Hường", score: 1, check: (c) => c[4] === 2 },
+            { id: "NHAT_HUONG", name: "Nhất Hường", score: 0, check: (c) => c[4] === 1 }
+        ];
+    }
+
+    setNumDice(n) {
+        this.numDice = parseInt(n) || 6;
+    }
+
+    setWeights(weights) {
+        // weights array [p1, p2, p3, p4, p5, p6]
+        let sum = weights.reduce((a, b) => a + b, 0);
+        if (sum === 0) {
+            this.faceWeights = [0, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6, 1 / 6];
+        } else {
+            this.faceWeights = [0, ...weights.map(w => w / sum)];
         }
+    }
 
-        if (K === 2) events.push("K=2");
-        if (K === 1) events.push("K=1");
-
-        // --- 2. Structural Logic (Non-Hường patterns) ---
-
-        // SUUT: 1,1,1,1,1,1
-        let isSuut = true;
-        for (let f = 1; f <= 6; f++) if (counts[f] !== 1) { isSuut = false; break; }
-        if (isSuut) events.push("SUUT");
-
-        // LUC PHU: 6 same (non-huong)
-        // NGU TU: 5 same (non-huong)
-        // TU TU: 4 same (non-huong) -> potentially Tứ Tự Cáp
-        let maxSame = 0;
-        let pairs = 0;
-        for (let f = 1; f <= 6; f++) {
-            if (f === HUONG_FACE) continue; // Hường processed above
-            if (counts[f] >= maxSame) maxSame = counts[f];
-            if (counts[f] === 2) pairs++;
-            if (counts[f] === 4) pairs += 2; // 4 counts as 2 pairs? usually no, strictly 2
-            // Correct counting for "3 Pairs" logic
-        }
-
-        // Re-count pairs strictly for THUONG_HA_MA
-        // 3 pairs means counts are like [2,2,2,0,0,0] (permutation)
-        let pairCount = 0;
-        for (let f = 1; f <= 6; f++) if (counts[f] === 2) pairCount++;
-        if (pairCount === 3) events.push("THUONG_HA_MA");
-
-        if (maxSame === 6) events.push("LUC_PHU");
-        if (maxSame === 5) events.push("NGU_TU");
-
-        // Fallback
-        if (events.length === 0) events.push("NO_EVENT");
-        return events;
+    setP4(p4) {
+        const pOther = (1 - p4) / 5;
+        this.setWeights([pOther, pOther, pOther, p4, pOther, pOther]);
     }
 
     /**
-     * Resolves priority and payout for a single turn.
-     */
-    resolveRound(counts) {
-        const events = this.classify(counts);
-        let bestEvent = "NO_EVENT";
-        let payout = 0;
-
-        for (let ev of PRIORITY_ORDER) {
-            if (events.includes(ev)) {
-                bestEvent = ev;
-                payout = this.paytable[ev] || 0;
-                break;
-            }
-        }
-        return { events, bestEvent, payout };
-    }
-
-    /**
-     * Simulates one round using RNG.
+     * Simulation
      */
     simulate() {
-        const counts = [0, 0, 0, 0, 0, 0, 0];
-        const p_other = (1 - this.p4) / 5;
+        const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+        const cdf = [0];
+        let acc = 0;
+        for (let i = 1; i <= 6; i++) {
+            acc += this.faceWeights[i];
+            cdf.push(acc);
+        }
 
-        for (let i = 0; i < 6; i++) {
-            let r = Math.random();
-            if (r < this.p4) {
-                counts[HUONG_FACE]++;
-            } else {
-                let r2 = (r - this.p4) / (1 - this.p4);
-                let idx = Math.floor(r2 * 5); // 0..4
-                const others = [1, 2, 3, 5, 6];
-                let face = others[idx] !== undefined ? others[idx] : 6;
-                counts[face]++;
+        for (let i = 0; i < this.numDice; i++) {
+            const r = Math.random();
+            for (let f = 1; f <= 6; f++) {
+                if (r < cdf[f]) {
+                    counts[f]++;
+                    break;
+                }
             }
         }
         return { counts, ...this.resolveRound(counts) };
     }
 
-    /**
-     * Exact Enumeration (The Solver)
-     * Calculates P(Event) for ALL events in the PROBABILITY SPACE.
-     * Iterates 462 vectors.
-     */
-    enumerateExact(target_p4 = null) {
-        let p4 = target_p4 !== null ? target_p4 : this.p4;
-        let p_other = (1 - p4) / 5;
+    resolveRound(counts) {
+        let activeRules = [];
+        let maxScore = 0;
+        let primaryEvent = "NONE";
 
-        let total_prob = 0;
-        let ev_sum = 0;
-
-        // Track probabilities for EVERY event tag (not just the best one)
-        let event_stats = {};
-
-        // Helper to add
-        const addStat = (ev, prob) => {
-            if (!event_stats[ev]) event_stats[ev] = 0;
-            event_stats[ev] += prob;
-        };
-
-        const process_partition = (counts) => {
-            // Multinomial Prob
-            let denom = 1;
-            let prob_term = 1;
-            for (let f = 1; f <= 6; f++) {
-                denom *= this.factorial(counts[f]);
-                let p_face = (f === HUONG_FACE) ? p4 : p_other;
-                prob_term *= Math.pow(p_face, counts[f]);
+        for (const rule of this.rules) {
+            if (rule.check(counts)) {
+                activeRules.push(rule.id);
+                if (rule.score > maxScore) {
+                    maxScore = rule.score;
+                    primaryEvent = rule.id;
+                }
             }
-            let multinomial_coeff = 720 / denom; // 6! = 720
-            let prob = multinomial_coeff * prob_term; // total coeff is 720/denom
-
-            total_prob += prob;
-
-            // Classify
-            const { events, bestEvent, payout } = this.resolveRound(counts);
-
-            // Accumulate Best Event (for Payout Distribution)
-            addStat(`BEST_${bestEvent}`, prob);
-            ev_sum += prob * payout;
-
-            // Accumulate ALL predicates (for Theoretical Analysis like "P(K>=2)")
-            events.forEach(ev => addStat(ev, prob));
-        };
-
-        // Generate Partitions
-        const generate = (index, remaining, current_counts) => {
-            if (index === 6) {
-                current_counts[6] = remaining;
-                process_partition(current_counts);
-                return;
-            }
-            for (let i = 0; i <= remaining; i++) {
-                current_counts[index] = i;
-                generate(index + 1, remaining - i, current_counts);
-            }
-        };
-
-        generate(1, 6, [0, 0, 0, 0, 0, 0, 0]);
-
-        return {
-            validity_check: total_prob, // Should be ~1.0
-            ev: ev_sum,
-            house_edge: 1 - ev_sum, // Assuming 1 unit bet
-            stats: event_stats
-        };
+        }
+        return { events: activeRules, bestEvent: primaryEvent, payout: maxScore };
     }
 
     /**
-     * Solver: Find p4 for Target Win Rate.
+     * Exact Statistics using Partition Generation
+     * Optimized for general N.
      */
-    solveP4(target_event_name, target_rate) {
-        let low = 0.05, high = 0.5;
-        let best = low;
-        for (let i = 0; i < 25; i++) {
-            let mid = (low + high) / 2;
-            let result = this.enumerateExact(mid);
-            let prob = result.stats[target_event_name] || 0;
-            if (prob < target_rate) low = mid;
-            else high = mid;
-            best = mid;
+    calculateStats() {
+        const partitions = [];
+        const generate = (index, rem, current) => {
+            if (index === 6) {
+                current[6] = rem;
+                partitions.push([...current]);
+                return;
+            }
+            for (let i = 0; i <= rem; i++) {
+                current[index] = i;
+                generate(index + 1, rem - i, current);
+            }
+        };
+        generate(1, this.numDice, [0, 0, 0, 0, 0, 0, 0]);
+
+        // Factorial cache
+        const f = [1];
+        for (let i = 1; i <= Math.max(this.numDice, 10); i++) f[i] = f[i - 1] * i;
+
+        let ev = 0;
+        const eventProbs = {};
+
+        for (const p of partitions) {
+            // Count dictionary for rules
+            const counts = { 1: p[1], 2: p[2], 3: p[3], 4: p[4], 5: p[5], 6: p[6] };
+
+            // Multinomial prob: (N! / product(ni!)) * product(pi^ni)
+            let denom = 1;
+            let probTerm = 1;
+            for (let i = 1; i <= 6; i++) {
+                denom *= f[p[i]] || 1;
+                probTerm *= Math.pow(this.faceWeights[i], p[i]);
+            }
+            const multinomialCoeff = f[this.numDice] / denom;
+            const prob = multinomialCoeff * probTerm;
+
+            const res = this.resolveRound(counts);
+            ev += prob * res.payout;
+
+            // Stats by tag
+            res.events.forEach(id => {
+                eventProbs[id] = (eventProbs[id] || 0) + prob;
+            });
+            // Best event stats
+            const bestKey = `BEST_${res.bestEvent}`;
+            eventProbs[bestKey] = (eventProbs[bestKey] || 0) + prob;
         }
+
+        return { ev, stats: eventProbs, houseEdge: (100 - ev) / 100 };
+    }
+
+    /**
+     * DP approach for a specific face (e.g. Hường count distribution)
+     * O(N) instead of O(N^5) partition complexity.
+     * Useful for heatmaps of single-variable rules.
+     */
+    getFaceCountDistribution(faceIndex, nOverride = null) {
+        const n = nOverride !== null ? nOverride : this.numDice;
+        const p = this.faceWeights[faceIndex];
+        const dist = new Array(n + 1).fill(0);
+
+        // Binomial(n, p) = nCr * p^r * (1-p)^(n-r)
+        // We can use DP to calculate binomial coeffs or just direct formula for stability
+        const combinations = (n, k) => {
+            if (k < 0 || k > n) return 0;
+            if (k === 0 || k === n) return 1;
+            if (k > n / 2) k = n - k;
+            let res = 1;
+            for (let i = 1; i <= k; i++) res = res * (n - i + 1) / i;
+            return res;
+        };
+
+        for (let k = 0; k <= n; k++) {
+            dist[k] = combinations(n, k) * Math.pow(p, k) * Math.pow(1 - p, n - k);
+        }
+        return dist;
+    }
+
+    /**
+     * Conditional Stats: P(Event | subset)
+     */
+    getConditionalStats(fixedDice) {
+        const remaining = this.numDice - fixedDice.length;
+        if (remaining < 0) return {};
+
+        const baseCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+        fixedDice.forEach(d => baseCounts[d]++);
+
+        const tempEngine = new XamHuongEngine(remaining);
+        tempEngine.setWeights(this.faceWeights.slice(1));
+        const subStats = tempEngine.calculateStats();
+
+        // This calculateStats gives probs for 'remaining' dice.
+        // We need to map these back to 'total' dice outcomes.
+        // Actually, calculateStats on remaining dice gives P(subcounts).
+        // The events it records are relative to subcounts.
+        // We need a custom loop here.
+
+        const partitions = [];
+        const generate = (index, rem, current) => {
+            if (index === 6) {
+                current[6] = rem;
+                partitions.push([...current]);
+                return;
+            }
+            for (let i = 0; i <= rem; i++) {
+                current[index] = i;
+                generate(index + 1, rem - i, current);
+            }
+        };
+        generate(1, remaining, [0, 0, 0, 0, 0, 0, 0]);
+
+        const f = [1];
+        for (let i = 1; i <= Math.max(remaining, 10); i++) f[i] = f[i - 1] * i;
+
+        const condProbs = {};
+        for (const p of partitions) {
+            let denom = 1;
+            let probTerm = 1;
+            for (let i = 1; i <= 6; i++) {
+                denom *= f[p[i]] || 1;
+                probTerm *= Math.pow(this.faceWeights[i], p[i]);
+            }
+            const prob = (f[remaining] / denom) * probTerm;
+
+            const finalCounts = { ...baseCounts };
+            for (let i = 1; i <= 6; i++) finalCounts[i] += p[i];
+
+            const res = this.resolveRound(finalCounts);
+            res.events.forEach(id => {
+                condProbs[id] = (condProbs[id] || 0) + prob;
+            });
+        }
+        return condProbs;
+    }
+
+    /**
+     * Solver: Find p4 for target win rate of an event
+     */
+    solveP4(eventId, targetRate) {
+        let low = 0, high = 1;
+        for (let i = 0; i < 20; i++) {
+            let mid = (low + high) / 2;
+            this.setP4(mid);
+            let stats = this.calculateStats();
+            let p = stats.stats[eventId] || 0;
+            if (p < targetRate) low = mid;
+            else high = mid;
+        }
+        const best = high;
+        this.setP4(1 / 6); // Reset or leave?
         return best;
     }
 
-    factorial(n) {
-        if (n <= 1) return 1;
-        let f = 1;
-        for (let i = 2; i <= n; i++) f *= i;
-        return f;
+    solveHouseEdge(targetEdge) {
+        let low = 0, high = 1;
+        for (let i = 0; i < 20; i++) {
+            let mid = (low + high) / 2;
+            this.setP4(mid);
+            let stats = this.calculateStats();
+            if (stats.houseEdge > targetEdge) low = mid;
+            else high = mid;
+        }
+        const best = high;
+        this.setP4(1 / 6);
+        return best;
     }
 }

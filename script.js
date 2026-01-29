@@ -1,275 +1,417 @@
 /**
- * script.js - UI Controller & Game Loop
+ * script.js - Research Platform Controller
  */
 
-const engine = new XamHuongEngine();
-const rollBtn = document.getElementById('btn-roll');
-const bowl = document.getElementById('bowl');
-const resultText = document.getElementById('result-text');
-const payoutDisplay = document.getElementById('payout-display');
+const engine = new XamHuongEngine(6, XAM_HUONG_RULES);
+let myChart = null;
 
-// Config Elements
-const p4Slider = document.getElementById('p4-slider');
-const p4Display = document.getElementById('p4-val-display');
+// --- DOM Elements ---
+const dom = {
+    // Tabs
+    tabBtns: document.querySelectorAll('.tab-btn'),
+    tabContents: document.querySelectorAll('.tab-content'),
 
-// Solver Elements
-const btnSolve = document.getElementById('btn-solve');
-const targetEventSel = document.getElementById('target-event');
-const targetRateInput = document.getElementById('target-rate');
+    // Play
+    rollBtn: document.getElementById('btn-roll'),
+    bowl: document.getElementById('bowl'),
+    resultText: document.getElementById('result-text'),
+    payoutDisplay: document.getElementById('payout-display'),
 
-// Analysis Elements
-const exactStatsDiv = document.getElementById('exact-stats');
-const btnRunMC = document.getElementById('btn-run-mc');
-const mcStatsDiv = document.getElementById('mc-stats');
-const mcTrialsInput = document.getElementById('mc-trials');
+    // Sandbox
+    sandboxBoard: document.getElementById('sandbox-board'),
+    sandboxOutcome: document.getElementById('sandbox-outcome'),
+    sandboxScore: document.getElementById('sandbox-score'),
 
-// Init
+    // Analysis
+    engineMetrics: document.getElementById('engine-metrics'),
+    condProbSetup: document.getElementById('cond-prob-setup'),
+    btnCalcCond: document.getElementById('btn-calc-cond'),
+    condProbOutput: document.getElementById('cond-prob-output'),
+
+    // Heritage
+    heritageList: document.getElementById('heritage-list'),
+    heritageDesc: document.getElementById('heritage-desc'),
+
+    // Config
+    diceCountInput: document.getElementById('dice-count-input'),
+    weightInputs: document.getElementById('weight-inputs'),
+    probSumDisplay: document.getElementById('prob-sum-display'),
+    btnApplyConfig: document.getElementById('btn-apply-config'),
+    solverMode: document.getElementById('solver-mode'),
+    solverTargetArea: document.getElementById('solver-target-area'),
+    btnSolve: document.getElementById('btn-solve'),
+
+    // Global
+    status: document.getElementById('log-status'),
+    btnExport: document.getElementById('btn-export')
+};
+
+// --- Initialization ---
 function init() {
-    updateEngineParams();
-    updateExactStats(); // Initial calculation
+    setupTabs();
+    setupHeritageUI();
+    setupWeightInputs();
+    setupSolverUI();
+    initChart();
 
-    // UI Listeners
-    p4Slider.addEventListener('input', (e) => {
-        p4Display.innerText = parseFloat(e.target.value).toFixed(6);
-        updateEngineParams();
+    renderSandbox();
+    updateAnalysis();
+
+    bindEvents();
+
+    dom.status.innerText = "Royal Palace Engine Initialized.";
+}
+
+function bindEvents() {
+    dom.rollBtn.onclick = handleRoll;
+    dom.btnApplyConfig.onclick = applyConfig;
+    dom.btnSolve.onclick = handleSolve;
+    dom.btnCalcCond.onclick = handleConditionalCalc;
+    dom.btnExport.onclick = exportData;
+
+    dom.diceCountInput.onchange = () => {
+        engine.setNumDice(dom.diceCountInput.value);
+        renderSandbox();
+    };
+}
+
+// --- Tab Logic ---
+function setupTabs() {
+    dom.tabBtns.forEach(btn => {
+        btn.onclick = () => {
+            dom.tabBtns.forEach(b => b.classList.remove('active'));
+            dom.tabContents.forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+
+            if (btn.dataset.tab === 'analysis') updateAnalysis();
+        };
     });
+}
 
-    // Debounce exact stats update on slider change
-    p4Slider.addEventListener('change', () => {
-        updateExactStats();
+// --- Heritage Logic ---
+function setupHeritageUI() {
+    dom.heritageList.innerHTML = '';
+    const icons = {
+        "HUE_COURT": "🏛️",
+        "FOLK_VILLAGE": "🏮",
+        "COMPETITIVE": "⚖️"
+    };
+
+    HERITAGE_PRESETS.forEach(preset => {
+        const btn = document.createElement('button');
+        btn.className = 'btn-preset';
+        btn.innerHTML = `
+            <span class="icon">${icons[preset.id] || "📜"}</span>
+            <strong>${preset.name}</strong>
+            <small>${preset.id}</small>
+        `;
+        btn.onclick = () => selectHeritage(preset);
+        dom.heritageList.appendChild(btn);
     });
 }
 
-function updateEngineParams() {
-    const p4 = parseFloat(p4Slider.value);
-    engine.setParams(p4);
+function selectHeritage(preset) {
+    document.querySelectorAll('.btn-preset').forEach(b => b.classList.remove('active'));
+    // Find button and mark active - simplified for now
+
+    dom.heritageDesc.innerHTML = `
+        <p>${preset.description}</p>
+        <br>
+        <p><strong>Configured Dice:</strong> ${preset.diceCount}</p>
+        <p><strong>Rules Loaded:</strong> ${preset.rules.length}</p>
+        <br>
+        <button class="btn-royal" onclick="applyHeritage('${preset.id}')">Restore This Heritage</button>
+    `;
 }
 
-// Global helper for preset buttons
-window.setParams = (val) => {
-    p4Slider.value = val;
-    p4Display.innerText = val.toFixed(6);
-    updateEngineParams();
-    updateExactStats();
+window.applyHeritage = (id) => {
+    const preset = HERITAGE_PRESETS.find(p => p.id === id);
+    if (!preset) return;
+
+    engine.setNumDice(preset.diceCount);
+    engine.setWeights(preset.probabilities);
+    dom.diceCountInput.value = preset.diceCount;
+    updateWeightInputsUI();
+    updateAnalysis();
+    alert(`Engine synced to ${preset.name}`);
+};
+
+// --- Config Logic ---
+function setupWeightInputs() {
+    dom.weightInputs.innerHTML = '';
+    for (let i = 1; i <= 6; i++) {
+        const div = document.createElement('div');
+        div.className = `weight-item face-${i}`;
+        div.innerHTML = `
+            <label>Face ${i}:</label>
+            <input type="number" step="0.01" class="prob-input" data-face="${i}" value="${(1 / 6).toFixed(3)}">
+        `;
+        dom.weightInputs.appendChild(div);
+    }
+
+    document.querySelectorAll('.prob-input').forEach(input => {
+        input.onchange = validateProbSum;
+    });
 }
 
-/**
- * Game Flow
- */
-rollBtn.addEventListener('click', async () => {
-    // 1. Animation State
-    rollBtn.disabled = true;
-    bowl.innerHTML = '<div class="dice-placeholder">...Đang đổ...</div>';
-    resultText.innerText = "Running...";
-    payoutDisplay.innerText = "";
+function updateWeightInputsUI() {
+    const weights = engine.faceWeights;
+    document.querySelectorAll('.prob-input').forEach(input => {
+        const f = input.dataset.face;
+        input.value = weights[f].toFixed(3);
+    });
+    validateProbSum();
+}
 
-    // 2. Wait for pseudo-animation
+function validateProbSum() {
+    let sum = 0;
+    document.querySelectorAll('.prob-input').forEach(input => sum += parseFloat(input.value || 0));
+    dom.probSumDisplay.innerText = `Total: ${sum.toFixed(3)}`;
+    dom.probSumDisplay.style.color = Math.abs(sum - 1.0) < 0.001 ? '#c5a059' : '#e74c3c';
+}
+
+function applyConfig() {
+    const weights = [];
+    document.querySelectorAll('.prob-input').forEach(input => weights.push(parseFloat(input.value || 0)));
+    engine.setWeights(weights);
+    engine.setNumDice(dom.diceCountInput.value);
+    updateAnalysis();
+    alert("Engine parameters synchronized.");
+}
+
+// --- Solver Logic ---
+function setupSolverUI() {
+    dom.solverMode.onchange = updateSolverInputs;
+    updateSolverInputs();
+}
+
+function updateSolverInputs() {
+    const mode = dom.solverMode.value;
+    if (mode === 'winrate') {
+        dom.solverTargetArea.innerHTML = `
+            <div class="input-row">
+                <label>Identify Pattern:</label>
+                <select id="solve-event-id">
+                    ${XAM_HUONG_RULES.map(r => `<option value="${r.id}">${r.name}</option>`).join('')}
+                </select>
+            </div>
+            <div class="input-row">
+                <label>Target Probability (0-1):</label>
+                <input type="number" id="solve-target-rate" value="0.5" step="0.05">
+            </div>
+        `;
+    } else {
+        dom.solverTargetArea.innerHTML = `
+            <div class="input-row">
+                <label>Target Edge (e.g. 0.05):</label>
+                <input type="number" id="solve-target-edge" value="0.05" step="0.01">
+            </div>
+        `;
+    }
+}
+
+async function handleSolve() {
+    const mode = dom.solverMode.value;
+    dom.btnSolve.innerText = "Computing...";
+    dom.btnSolve.disabled = true;
+
+    await new Promise(r => setTimeout(r, 100)); // UI breathe
+
+    let resultP4;
+    if (mode === 'winrate') {
+        const id = document.getElementById('solve-event-id').value;
+        const rate = parseFloat(document.getElementById('solve-target-rate').value);
+        resultP4 = engine.solveP4(id, rate);
+    } else {
+        const edge = parseFloat(document.getElementById('solve-target-edge').value);
+        resultP4 = engine.solveHouseEdge(edge);
+    }
+
+    engine.setP4(resultP4);
+    updateWeightInputsUI();
+    updateAnalysis();
+
+    dom.btnSolve.innerText = "Run Optimization";
+    dom.btnSolve.disabled = false;
+    alert(`Optimal p4 found: ${resultP4.toFixed(4)}`);
+}
+
+// --- Game Logic ---
+async function handleRoll() {
+    dom.rollBtn.disabled = true;
+    dom.bowl.innerHTML = '<div class="placeholder">Churning...</div>';
+
     await new Promise(r => setTimeout(r, 600));
 
-    // 3. Engine Roll
     const result = engine.simulate();
+    renderDice(result.counts, dom.bowl);
 
-    // 4. Render Dice
-    renderDice(result.counts);
+    dom.resultText.innerText = result.bestEvent !== "NONE" ? XAM_HUONG_RULES.find(r => r.id === result.bestEvent).name : "No Event";
+    dom.payoutDisplay.innerText = `${result.payout}x`;
 
-    // 5. Show Result
-    const bestEv = result.bestEvent;
-    const payout = result.payout;
+    dom.rollBtn.disabled = false;
+    dom.status.innerText = `Rolled: ${result.bestEvent}`;
+}
 
-    // Format Result Display
-    let resultHtml = `<div class="result-event">${bestEv}</div>`;
-
-    const subEvents = result.events.filter(e => e !== bestEv && e !== "NO_EVENT").join(", ");
-    if (subEvents) {
-        resultHtml += `<div class="result-sub">Matches: ${subEvents}</div>`;
-    }
-    resultText.innerHTML = resultHtml;
-
-    // Formatting Payout with Classes
-    if (payout > 0) {
-        payoutDisplay.className = 'payout-tag win';
-        payoutDisplay.innerHTML = `WIN <span class="multiplier">x${payout}</span>`;
-    } else {
-        payoutDisplay.className = 'payout-tag lose';
-        payoutDisplay.innerHTML = `LOSE`;
-    }
-
-    // Log
-    logResult(result);
-
-    rollBtn.disabled = false;
-});
-
-function renderDice(counts) {
-    bowl.innerHTML = '';
-    // Flatten counts
-    let faces = [];
+function renderDice(counts, container) {
+    container.innerHTML = '';
+    const faces = [];
     for (let f = 1; f <= 6; f++) {
         for (let k = 0; k < counts[f]; k++) faces.push(f);
     }
-    // Shuffle
-    faces.sort(() => Math.random() - 0.5);
 
-    faces.forEach(faceVal => {
+    faces.forEach(val => {
         const d = document.createElement('div');
-        // Map face val to class
-        const faceClasses = ['first-face', 'second-face', 'third-face', 'fourth-face', 'fifth-face', 'sixth-face'];
-        d.className = `dice ${faceClasses[faceVal - 1]}`;
-
-        d.innerHTML = createDots(faceVal);
-        bowl.appendChild(d);
+        d.className = `dice face-${val}`;
+        d.innerHTML = createDots(val);
+        container.appendChild(d);
     });
 }
 
 function createDots(face) {
-    const isOdd = face % 2 !== 0; // 1, 3, 5 are odd
-    const colorClass = isOdd ? 'red' : 'black';
-    const dotHtml = `<span class="dot ${colorClass}"></span>`;
+    const isRed = (face === 4 || face === 1);
+    const dotTag = isRed ? 'dot red' : 'dot';
 
-    // Helper to generic N dots
-    const dots = (n) => Array(n).fill(dotHtml).join('');
+    let dots = '';
+    const patterns = {
+        1: [1],
+        2: ['2-1', '2-2'],
+        3: ['3-1', '3-2', '3-3'],
+        4: ['4-1', '4-2', '4-3', '4-4'],
+        5: ['5-1', '5-2', '5-3', '5-4', '5-5'],
+        6: ['6-1', '6-2', '6-3', '6-4', '6-5', '6-6']
+    };
 
-    // Faces structure
-    if (face === 1) return dots(1);
-    if (face === 2) return dots(2);
-    if (face === 3) return dots(3);
-
-    if (face === 4) {
-        return `
-            <div class="column">${dots(2)}</div>
-            <div class="column">${dots(2)}</div>
-        `;
-    }
-
-    if (face === 5) {
-        return `
-            <div class="column">${dots(2)}</div>
-            <div class="column">${dots(1)}</div>
-            <div class="column">${dots(2)}</div>
-        `;
-    }
-
-    if (face === 6) {
-        return `
-            <div class="column">${dots(3)}</div>
-            <div class="column">${dots(3)}</div>
-        `;
-    }
-    return '';
-}
-
-function logResult(res) {
-    const list = document.getElementById('game-log');
-    const li = document.createElement('li');
-    // Compact log
-    const diceStr = res.counts.slice(1).map((c, i) => c > 0 ? `${i + 1}:${c}` : '').filter(s => s).join(', ');
-    const outcomeClass = res.payout > 0 ? 'win' : 'lose';
-    li.innerHTML = `<span class="log-dice">[${diceStr}]</span> <span class="log-outcome ${outcomeClass}">${res.bestEvent} (x${res.payout})</span>`;
-    list.prepend(li);
-}
-
-/**
- * Solver
- */
-btnSolve.addEventListener('click', () => {
-    const evap = targetEventSel.value;
-    const rate = parseFloat(targetRateInput.value);
-
-    btnSolve.innerText = "Solving...";
-    btnSolve.disabled = true;
-
-    setTimeout(() => {
-        const p4Found = engine.solveP4(evap, rate);
-        // Apply
-        setParams(p4Found);
-        btnSolve.innerText = "Tìm p4";
-        btnSolve.disabled = false;
-        // Optional: toast or highlight effect
-    }, 50);
-});
-
-/**
- * Analysis UI Update
- */
-function updateExactStats() {
-    exactStatsDiv.innerHTML = "Calculating...";
-    // prevent UI blocking
-    setTimeout(() => {
-        const stats = engine.enumerateExact();
-
-        // Header
-        let html = `<div class="stat-row highlight">
-            <span>House Edge:</span>
-            <span>${(stats.house_edge * 100).toFixed(2)}%</span>
-        </div>`;
-        html += `<div class="stat-row">
-            <span>Expected Value (EV):</span>
-            <span>${stats.ev.toFixed(4)}</span>
-        </div><hr>`;
-
-        // Grid for details
-        html += `<div class="stats-columns">`;
-
-        // Column 1: General Hường
-        html += `<div class="col"><h5>Based on Hường (K)</h5>`;
-        const kStats = ["K=1", "K=2", "K=3", "K>=2", "K>=3"];
-        kStats.forEach(key => {
-            let p = stats.stats[key] || 0;
-            html += `<div class="stat-item"><span>${key}:</span> <b>${(p * 100).toFixed(2)}%</b></div>`;
-        });
-        html += `</div>`;
-
-        // Column 2: Patterns
-        html += `<div class="col"><h5>Special Patterns</h5>`;
-        const special = ["PHAN_SONG_TAM", "SUUT", "THUONG_HA_MA", "LUC_HUONG", "LUC_PHU", "TU_HUONG"];
-        special.forEach(key => {
-            let p = stats.stats[key] || 0;
-            // Highlight rare ones
-            let style = p < 0.01 ? 'color:#ffab91' : '';
-            html += `<div class="stat-item" style="${style}"><span>${key}:</span> <b>${(p * 100).toFixed(3)}%</b></div>`;
-        });
-        html += `</div>`;
-        html += `</div>`; // end grid
-
-        exactStatsDiv.innerHTML = html;
-    }, 10);
-}
-
-btnRunMC.addEventListener('click', () => {
-    const n = parseInt(mcTrialsInput.value);
-    mcStatsDiv.innerText = "Running...";
-
-    setTimeout(() => {
-        let hits = {};
-        for (let i = 0; i < n; i++) {
-            let res = engine.simulate();
-            let ev = res.bestEvent;
-            hits[ev] = (hits[ev] || 0) + 1;
-        }
-
-        let html = `<div class="mc-summary">Trials: <b>${n}</b></div>`;
-        html += `<table class="mc-table"><thead><tr><th>Event</th><th>Prob (%)</th></tr></thead><tbody>`;
-
-        // Sort by frequency
-        Object.entries(hits).sort((a, b) => b[1] - a[1]).forEach(([ev, count]) => {
-            let percent = ((count / n) * 100).toFixed(2);
-            html += `<tr><td>${ev}</td><td>${percent}%</td></tr>`;
-        });
-
-        html += `</tbody></table>`;
-        mcStatsDiv.innerHTML = html;
-    }, 50);
-});
-
-// Tab Switcher
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-        btn.classList.add('active');
-        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+    patterns[face].forEach(p => {
+        dots += `<span class="${dotTag} dot-${p}"></span>`;
     });
-});
+    return dots;
+}
+
+// --- Sandbox Logic ---
+const sandboxState = [1, 2, 3, 4, 5, 6];
+
+function renderSandbox() {
+    dom.sandboxBoard.innerHTML = '';
+    // Adapt to N dice
+    const n = parseInt(dom.diceCountInput.value);
+    while (sandboxState.length < n) sandboxState.push(1);
+    while (sandboxState.length > n) sandboxState.pop();
+
+    sandboxState.forEach((val, idx) => {
+        const d = document.createElement('div');
+        d.className = 'dice clickable';
+        d.innerHTML = createDots(val);
+        d.onclick = () => {
+            sandboxState[idx] = (sandboxState[idx] % 6) + 1;
+            renderSandbox();
+            updateSandboxResult();
+        };
+        dom.sandboxBoard.appendChild(d);
+    });
+    updateSandboxResult();
+}
+
+function updateSandboxResult() {
+    const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+    sandboxState.forEach(v => counts[v]++);
+
+    const res = engine.resolveRound(counts);
+    dom.sandboxOutcome.innerText = res.bestEvent !== "NONE" ? XAM_HUONG_RULES.find(r => r.id === res.bestEvent).name : "None";
+    dom.sandboxScore.innerText = res.payout;
+
+    dom.condProbSetup.innerText = `[${sandboxState.slice(0, 2).join(', ')}]`;
+}
+
+// --- Analysis Logic ---
+function initChart() {
+    const ctx = document.getElementById('dist-chart').getContext('2d');
+    myChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Event Probability (%)',
+                data: [],
+                backgroundColor: 'rgba(197, 160, 89, 0.6)',
+                borderColor: '#c5a059',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' } },
+                x: { grid: { display: false } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+function updateAnalysis() {
+    const stats = engine.calculateStats();
+
+    // Engine Metrics
+    dom.engineMetrics.innerHTML = `
+        <div class="metric-item"><span>Theoretical EV:</span> <strong>${stats.ev.toFixed(3)}</strong></div>
+        <div class="metric-item"><span>House Edge:</span> <strong>${(stats.houseEdge * 100).toFixed(2)}%</strong></div>
+        <div class="metric-item"><span>Dice Count (N):</span> <strong>${engine.numDice}</strong></div>
+    `;
+
+    // Chart
+    const keys = XAM_HUONG_RULES.map(r => r.id).filter(id => stats.stats[id] > 0.0001);
+    const labels = keys.map(id => XAM_HUONG_RULES.find(r => r.id === id).name);
+    const data = keys.map(id => (stats.stats[id] * 100).toFixed(2));
+
+    myChart.data.labels = labels;
+    myChart.data.datasets[0].data = data;
+    myChart.update();
+}
+
+async function handleConditionalCalc() {
+    const fixed = sandboxState.slice(0, 2);
+    dom.condProbOutput.innerHTML = "<div class='status'>Analyzing Royal Outcomes...</div>";
+
+    await new Promise(r => setTimeout(r, 400));
+
+    const probs = engine.getConditionalStats(fixed);
+    const sorted = Object.entries(probs)
+        .filter(([id, p]) => p > 0.005)
+        .sort((a, b) => b[1] - a[1]);
+
+    let html = "<div class='prob-results'>";
+    sorted.forEach(([id, p]) => {
+        const rule = XAM_HUONG_RULES.find(r => r.id === id);
+        const percent = (p * 100).toFixed(1);
+        html += `
+            <div class='prob-card'>
+                <div class='label'>${rule.name}</div>
+                <div class='value'>${percent}%</div>
+                <div class='prob-bar-container'>
+                    <div class='prob-bar' style='width: ${percent}%'></div>
+                </div>
+            </div>
+        `;
+    });
+    html += "</div>";
+    dom.condProbOutput.innerHTML = html;
+}
+
+function exportData() {
+    const stats = engine.calculateStats();
+    let csv = "Event,Probability\n";
+    XAM_HUONG_RULES.forEach(r => {
+        csv += `${r.name},${(stats.stats[r.id] || 0)}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `xam_huong_data_N${engine.numDice}.csv`;
+    a.click();
+}
 
 init();
