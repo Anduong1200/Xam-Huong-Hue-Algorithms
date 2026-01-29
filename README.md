@@ -42,4 +42,4 @@ Dự án đi kèm với bộ tài liệu phân tích chuyên sâu:
 - **Math**: Combinatorics & Probability Algorithms.
 
 ---
-*Dự án được xây dựng với sự hỗ trợ của AI Assistant.*
+
